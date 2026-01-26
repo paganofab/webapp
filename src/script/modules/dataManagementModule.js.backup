@@ -1,0 +1,831 @@
+/**
+ * Data Management Module
+ * Handles backup, restore, and data management functionality
+ */
+
+import i18n from '../i18n';
+
+class DataManagementModule {
+  constructor(app) {
+    this.app = app;
+    this.i18n = i18n;
+    this.isVisible = false;
+  }
+
+  /**
+   * Convert complex template to simplified interface
+   */
+  updateTemplateToSimplified() {
+    console.log('🔄 Converting DataManagementModule template to simplified interface...');
+    
+    // Find the module container
+    const moduleContainer = document.querySelector('.data-management-module');
+    if (!moduleContainer) {
+      console.warn('⚠️ DataManagementModule container not found for template conversion');
+      return;
+    }
+
+    // Look for complex backup options that need simplification
+    const backupTypeSelect = moduleContainer.querySelector('#backup-type-select');
+    const customBackupOptions = moduleContainer.querySelector('#custom-backup-options');
+    
+    if (backupTypeSelect && customBackupOptions) {
+      // Hide complex options and set to simple mode
+      backupTypeSelect.style.display = 'none';
+      customBackupOptions.style.display = 'none';
+      
+      // Add simplified backup message if not exists
+      let simplifiedMsg = moduleContainer.querySelector('.simplified-backup-msg');
+      if (!simplifiedMsg) {
+        simplifiedMsg = document.createElement('p');
+        simplifiedMsg.className = 'simplified-backup-msg';
+        simplifiedMsg.style.cssText = 'color: #666; font-style: italic; margin: 10px 0;';
+        simplifiedMsg.textContent = 'Simple backup mode - creates complete database backup';
+        
+        const backupSection = moduleContainer.querySelector('.backup-options');
+        if (backupSection) {
+          backupSection.insertBefore(simplifiedMsg, backupSection.firstChild);
+        }
+      }
+    }
+
+    console.log('✅ Template conversion completed');
+  }
+
+  /**
+   * Get the module content HTML
+   */
+  getContent() {
+    return `
+      <div class="data-management-module">
+        <div class="module-header">
+          <h2 data-i18n="dataManagement.title">Data Management</h2>
+          <p class="module-subtitle" data-i18n="dataManagement.subtitle">Backup, restore, and manage your family data</p>
+        </div>
+
+        <div class="data-management-content">
+          <!-- Backup Section -->
+          <div class="management-section backup-section">
+            <div class="section-header">
+              <h3 data-i18n="dataManagement.backup.title">Create Backup</h3>
+              <p data-i18n="dataManagement.backup.description">Create a complete backup of all your family data</p>
+            </div>
+            
+            <div class="backup-options">
+              <div class="backup-type-selector">
+                <label data-i18n="dataManagement.backup.type">Backup Type:</label>
+                <select id="backup-type-select">
+                  <option value="full" data-i18n="dataManagement.backup.full">Complete Backup (All Data)</option>
+                  <option value="families" data-i18n="dataManagement.backup.families">Families Only</option>
+                  <option value="pedigrees" data-i18n="dataManagement.backup.pedigrees">Pedigrees Only</option>
+                  <option value="custom" data-i18n="dataManagement.backup.custom">Custom Selection</option>
+                </select>
+              </div>
+
+              <div class="custom-backup-options hidden" id="custom-backup-options">
+                <h4 data-i18n="dataManagement.backup.selectData">Select Data to Include:</h4>
+                <div class="checkbox-group">
+                  <label><input type="checkbox" id="backup-families" checked> <span data-i18n="dataManagement.backup.includeFamilies">Family Data</span></label>
+                  <label><input type="checkbox" id="backup-members" checked> <span data-i18n="dataManagement.backup.includeMembers">Family Members</span></label>
+                  <label><input type="checkbox" id="backup-pedigrees" checked> <span data-i18n="dataManagement.backup.includePedigrees">Pedigrees</span></label>
+                  <label><input type="checkbox" id="backup-analyses" checked> <span data-i18n="dataManagement.backup.includeAnalyses">Family Analyses</span></label>
+                  <label><input type="checkbox" id="backup-risks" checked> <span data-i18n="dataManagement.backup.includeRisks">Risk Assessments</span></label>
+                </div>
+              </div>
+
+              <div class="backup-actions">
+                <button class="btn-primary" id="create-backup-btn">
+                  <i class="icon-download"></i>
+                  <span data-i18n="dataManagement.backup.create">Create Backup</span>
+                </button>
+                <div class="backup-progress hidden" id="backup-progress">
+                  <div class="progress-bar">
+                    <div class="progress-fill" id="backup-progress-fill"></div>
+                  </div>
+                  <span class="progress-text" id="backup-progress-text" data-i18n="dataManagement.backup.creating">Creating backup...</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Restore Section -->
+          <div class="management-section restore-section">
+            <div class="section-header">
+              <h3 data-i18n="dataManagement.restore.title">Restore from Backup</h3>
+              <p data-i18n="dataManagement.restore.description">Restore your data from a previously created backup file</p>
+            </div>
+
+            <div class="restore-options">
+              <div class="file-upload-area" id="backup-file-area">
+                <div class="upload-icon">📁</div>
+                <p data-i18n="dataManagement.restore.dragDrop">Drag and drop your backup file here</p>
+                <p data-i18n="dataManagement.restore.orClick">or click to browse</p>
+                <input type="file" id="backup-file-input" accept=".json" style="display: none;">
+              </div>
+
+              <div class="restore-preview hidden" id="restore-preview">
+                <h4 data-i18n="dataManagement.restore.preview">Backup Preview:</h4>
+                <div class="backup-info" id="backup-info"></div>
+                
+                <div class="restore-options-panel">
+                  <h4 data-i18n="dataManagement.restore.options">Restore Options:</h4>
+                  <div class="radio-group">
+                    <label><input type="radio" name="restore-mode" value="replace" checked> <span data-i18n="dataManagement.restore.replace">Replace all existing data</span></label>
+                    <label><input type="radio" name="restore-mode" value="merge"> <span data-i18n="dataManagement.restore.merge">Merge with existing data</span></label>
+                    <label><input type="radio" name="restore-mode" value="selective"> <span data-i18n="dataManagement.restore.selective">Selective restore</span></label>
+                  </div>
+                </div>
+
+                <div class="restore-actions">
+                  <button class="btn-primary" id="restore-backup-btn">
+                    <i class="icon-upload"></i>
+                    <span data-i18n="dataManagement.restore.start">Restore Data</span>
+                  </button>
+                  <button class="btn-secondary" id="cancel-restore-btn" data-i18n="common.cancel">Cancel</button>
+                </div>
+
+                <div class="restore-progress hidden" id="restore-progress">
+                  <div class="progress-bar">
+                    <div class="progress-fill" id="restore-progress-fill"></div>
+                  </div>
+                  <span class="progress-text" id="restore-progress-text" data-i18n="dataManagement.restore.restoring">Restoring data...</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Storage Information -->
+          <div class="management-section storage-section">
+            <div class="section-header">
+              <h3 data-i18n="dataManagement.storage.title">Storage Information</h3>
+            </div>
+            
+            <div class="storage-stats" id="storage-stats">
+              <div class="stat-item">
+                <span class="stat-label" data-i18n="dataManagement.storage.totalFamilies">Total Families:</span>
+                <span class="stat-value" id="total-families-count">-</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-label" data-i18n="dataManagement.storage.totalMembers">Total Members:</span>
+                <span class="stat-value" id="total-members-count">-</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-label" data-i18n="dataManagement.storage.totalPedigrees">Total Pedigrees:</span>
+                <span class="stat-value" id="total-pedigrees-count">-</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-label" data-i18n="dataManagement.storage.dbSize">Database Size:</span>
+                <span class="stat-value" id="db-size">-</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-label" data-i18n="dataManagement.storage.lastBackup">Last Backup:</span>
+                <span class="stat-value" id="last-backup-date">-</span>
+              </div>
+            </div>
+
+            <div class="storage-actions">
+              <button class="btn-secondary" id="refresh-stats-btn" data-i18n="dataManagement.storage.refresh">Refresh Statistics</button>
+              <button class="btn-warning" id="cleanup-btn" data-i18n="dataManagement.storage.cleanup">Clean Up Database</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Status Messages -->
+        <div class="status-messages" id="status-messages"></div>
+      </div>
+    `;
+  }
+
+  /**
+   * Initialize the module
+   */
+  async init() {
+    console.log('🔧 Initializing Data Management module...');
+    
+    // Convert template to simplified interface if needed
+    this.updateTemplateToSimplified();
+    
+    this.setupEventListeners();
+    await this.loadStorageStats();
+    
+    // Apply translations
+    if (this.i18n && typeof this.i18n.updateDOM === 'function') {
+      this.i18n.updateDOM();
+    }
+    
+    console.log('✅ Data Management module initialized');
+  }
+
+  /**
+   * Setup event listeners
+   */
+  setupEventListeners() {
+    // Backup type selector
+    const backupTypeSelect = document.getElementById('backup-type-select');
+    if (backupTypeSelect) {
+      backupTypeSelect.addEventListener('change', (e) => {
+        this.handleBackupTypeChange(e.target.value);
+      });
+    }
+
+    // Create backup button
+    const createBackupBtn = document.getElementById('create-backup-btn');
+    if (createBackupBtn) {
+      createBackupBtn.addEventListener('click', () => {
+        this.createBackup();
+      });
+    }
+
+    // File upload for restore
+    this.setupFileUpload();
+
+    // Restore buttons
+    const restoreBtn = document.getElementById('restore-backup-btn');
+    if (restoreBtn) {
+      restoreBtn.addEventListener('click', () => {
+        this.restoreBackup();
+      });
+    }
+
+    const cancelRestoreBtn = document.getElementById('cancel-restore-btn');
+    if (cancelRestoreBtn) {
+      cancelRestoreBtn.addEventListener('click', () => {
+        this.cancelRestore();
+      });
+    }
+
+    // Storage management buttons
+    const refreshStatsBtn = document.getElementById('refresh-stats-btn');
+    if (refreshStatsBtn) {
+      refreshStatsBtn.addEventListener('click', () => {
+        this.loadStorageStats();
+      });
+    }
+
+    const cleanupBtn = document.getElementById('cleanup-btn');
+    if (cleanupBtn) {
+      cleanupBtn.addEventListener('click', () => {
+        this.cleanupDatabase();
+      });
+    }
+  }
+
+  /**
+   * Handle backup type selection change
+   */
+  handleBackupTypeChange(type) {
+    const customOptions = document.getElementById('custom-backup-options');
+    if (customOptions) {
+      if (type === 'custom') {
+        customOptions.classList.remove('hidden');
+      } else {
+        customOptions.classList.add('hidden');
+      }
+    }
+  }
+
+  /**
+   * Setup file upload functionality
+   */
+  setupFileUpload() {
+    const fileArea = document.getElementById('backup-file-area');
+    const fileInput = document.getElementById('backup-file-input');
+
+    if (fileArea && fileInput) {
+      // Click to browse
+      fileArea.addEventListener('click', () => {
+        fileInput.click();
+      });
+
+      // File selection
+      fileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          this.handleBackupFileSelection(file);
+        }
+      });
+
+      // Drag and drop
+      fileArea.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        fileArea.classList.add('drag-over');
+      });
+
+      fileArea.addEventListener('dragleave', () => {
+        fileArea.classList.remove('drag-over');
+      });
+
+      fileArea.addEventListener('drop', (e) => {
+        e.preventDefault();
+        fileArea.classList.remove('drag-over');
+        
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+          this.handleBackupFileSelection(files[0]);
+        }
+      });
+    }
+  }
+
+  /**
+   * Create backup using SQLite dump approach
+   */
+  async createBackup() {
+    try {
+      console.log('🔄 Starting backup creation...');
+      
+      const progressBar = document.getElementById('backup-progress');
+      const progressFill = document.getElementById('backup-progress-fill');
+      const progressText = document.getElementById('backup-progress-text');
+
+      // Show progress
+      if (progressBar) {
+        progressBar.classList.remove('hidden');
+        this.updateProgress(progressFill, progressText, 10, this.i18n.t('dataManagement.backup.starting', 'Starting backup...'));
+      }
+
+      // Use the working IPC method to create backup
+      const result = await window.electronAPI.invoke('create-backup');
+      
+      if (result.success) {
+        if (progressBar) {
+          this.updateProgress(progressFill, progressText, 100, this.i18n.t('dataManagement.backup.complete', 'Backup completed!'));
+          setTimeout(() => progressBar.classList.add('hidden'), 2000);
+        }
+        
+        // Update last backup date
+        localStorage.setItem('last-backup-date', new Date().toISOString());
+        await this.loadStorageStats();
+        
+        this.showMessage('success', this.i18n.t('dataManagement.backup.success', 'Backup created successfully!'));
+        console.log('✅ Backup completed successfully');
+      } else {
+        throw new Error(result.message || 'Backup failed');
+      }
+
+    } catch (error) {
+      console.error('❌ Backup error:', error);
+      
+      const progressBar = document.getElementById('backup-progress');
+      if (progressBar) {
+        progressBar.classList.add('hidden');
+      }
+      
+      this.showMessage('error', this.i18n.t('dataManagement.backup.error', 'Backup failed: ') + error.message);
+    }
+  }
+      
+      }
+
+  /**
+   * Handle backup type selection change
+   */
+  handleBackupTypeChange(type) {
+    const customOptions = document.getElementById('custom-backup-options');
+    if (customOptions) {
+      if (type === 'custom') {
+        customOptions.classList.remove('hidden');
+      } else {
+        customOptions.classList.add('hidden');
+      }
+    }
+  }
+  }
+
+  /**
+   * Get backup include options based on type
+   */
+  getBackupIncludes(type) {
+    switch (type) {
+      case 'full':
+        return {
+          families: true,
+          members: true,
+          pedigrees: true,
+          analyses: true,
+          risks: true
+        };
+      case 'families':
+        return {
+          families: true,
+          members: true,
+          pedigrees: false,
+          analyses: false,
+          risks: false
+        };
+      case 'pedigrees':
+        return {
+          families: false,
+          members: false,
+          pedigrees: true,
+          analyses: false,
+          risks: false
+        };
+      case 'custom':
+        return {
+          families: document.getElementById('backup-families')?.checked || false,
+          members: document.getElementById('backup-members')?.checked || false,
+          pedigrees: document.getElementById('backup-pedigrees')?.checked || false,
+          analyses: document.getElementById('backup-analyses')?.checked || false,
+          risks: document.getElementById('backup-risks')?.checked || false
+        };
+      default:
+        return {
+          families: true,
+          members: true,
+          pedigrees: true,
+          analyses: true,
+          risks: true
+        };
+    }
+  }
+
+  /**
+   * Collect backup data from database
+   */
+  async collectBackupData(includes, progressCallback) {
+    const backupData = {
+      metadata: {
+        version: "1.0",
+        created_at: new Date().toISOString(),
+        app_version: "1.1.5",
+        backup_type: includes,
+        created_by: "PedigreePro Data Management"
+      }
+    };
+
+    let progress = 20;
+
+    try {
+      // Collect families
+      if (includes.families) {
+        progressCallback(progress, this.i18n.t('dataManagement.backup.collectingFamilies', 'Collecting families...'));
+        backupData.families = await window.electronAPI.invoke('get-all-families');
+        progress += 15;
+      }
+
+      // Collect family members
+      if (includes.members) {
+        progressCallback(progress, this.i18n.t('dataManagement.backup.collectingMembers', 'Collecting family members...'));
+        backupData.members = await window.electronAPI.invoke('get-all-family-members');
+        progress += 15;
+      }
+
+      // Collect pedigrees
+      if (includes.pedigrees) {
+        progressCallback(progress, this.i18n.t('dataManagement.backup.collectingPedigrees', 'Collecting pedigrees...'));
+        backupData.pedigrees = await window.electronAPI.invoke('get-all-pedigrees');
+        progress += 15;
+      }
+
+      // Collect family analyses
+      if (includes.analyses) {
+        progressCallback(progress, this.i18n.t('dataManagement.backup.collectingAnalyses', 'Collecting analyses...'));
+        backupData.analyses = await window.electronAPI.invoke('get-all-family-analyses');
+        progress += 15;
+      }
+
+      // Collect risk assessments
+      if (includes.risks) {
+        progressCallback(progress, this.i18n.t('dataManagement.backup.collectingRisks', 'Collecting risk assessments...'));
+        backupData.risks = await window.electronAPI.invoke('get-all-risk-assessments');
+        progress += 10;
+      }
+
+      // Update metadata with counts
+      backupData.metadata.total_families = backupData.families?.length || 0;
+      backupData.metadata.total_members = backupData.members?.length || 0;
+      backupData.metadata.total_pedigrees = backupData.pedigrees?.length || 0;
+      backupData.metadata.total_analyses = backupData.analyses?.length || 0;
+      backupData.metadata.total_risks = backupData.risks?.length || 0;
+
+      return backupData;
+
+    } catch (error) {
+      console.error('Error collecting backup data:', error);
+      throw new Error(`Failed to collect data: ${error.message}`);
+    }
+  }
+
+  /**
+   * Handle backup file selection for restore
+   */
+  async handleBackupFileSelection(file) {
+    if (!file.name.endsWith('.json')) {
+      this.showMessage('error', this.i18n.t('dataManagement.restore.invalidFile', 'Please select a valid JSON backup file.'));
+      return;
+    }
+
+    try {
+      const text = await file.text();
+      const backupData = JSON.parse(text);
+
+      // Validate backup format
+      if (!this.validateBackupFile(backupData)) {
+        this.showMessage('error', this.i18n.t('dataManagement.restore.invalidFormat', 'Invalid backup file format.'));
+        return;
+      }
+
+      // Store backup data for restoration
+      this.selectedBackupData = backupData;
+
+      // Show preview
+      this.showBackupPreview(backupData);
+
+    } catch (error) {
+      console.error('Error reading backup file:', error);
+      this.showMessage('error', this.i18n.t('dataManagement.restore.readError', 'Error reading backup file: ') + error.message);
+    }
+  }
+
+  /**
+   * Validate backup file format
+   */
+  validateBackupFile(data) {
+    return (
+      data &&
+      data.metadata &&
+      data.metadata.version &&
+      (data.families || data.members || data.pedigrees || data.analyses || data.risks)
+    );
+  }
+
+  /**
+   * Show backup preview
+   */
+  showBackupPreview(backupData) {
+    const preview = document.getElementById('restore-preview');
+    const backupInfo = document.getElementById('backup-info');
+
+    if (preview && backupInfo) {
+      const metadata = backupData.metadata;
+      
+      backupInfo.innerHTML = `
+        <div class="backup-details">
+          <div class="detail-item">
+            <strong>${this.i18n.t('dataManagement.restore.version', 'Version')}:</strong> ${metadata.version || 'Unknown'}
+          </div>
+          <div class="detail-item">
+            <strong>${this.i18n.t('dataManagement.restore.created', 'Created')}:</strong> ${new Date(metadata.created_at).toLocaleString()}
+          </div>
+          <div class="detail-item">
+            <strong>${this.i18n.t('dataManagement.restore.appVersion', 'App Version')}:</strong> ${metadata.app_version || 'Unknown'}
+          </div>
+          <div class="detail-item">
+            <strong>${this.i18n.t('dataManagement.restore.families', 'Families')}:</strong> ${metadata.total_families || 0}
+          </div>
+          <div class="detail-item">
+            <strong>${this.i18n.t('dataManagement.restore.members', 'Members')}:</strong> ${metadata.total_members || 0}
+          </div>
+          <div class="detail-item">
+            <strong>${this.i18n.t('dataManagement.restore.pedigrees', 'Pedigrees')}:</strong> ${metadata.total_pedigrees || 0}
+          </div>
+        </div>
+      `;
+
+      preview.classList.remove('hidden');
+    }
+  }
+
+  /**
+   * Restore backup using IPC approach
+   */
+  async restoreBackup() {
+    try {
+      console.log('🔄 Starting backup restoration...');
+      
+      // Open file dialog via IPC
+      const result = await window.electronAPI.invoke('select-restore-file');
+      
+      if (result.success && result.filePath) {
+        const progressBar = document.getElementById('restore-progress');
+        const progressFill = document.getElementById('restore-progress-fill');
+        const progressText = document.getElementById('restore-progress-text');
+
+        // Show progress
+        if (progressBar) {
+          progressBar.classList.remove('hidden');
+          this.updateProgress(progressFill, progressText, 10, this.i18n.t('dataManagement.restore.starting', 'Starting restore...'));
+        }
+
+        // Restore via IPC
+        const restoreResult = await window.electronAPI.invoke('restore-backup', result.filePath);
+        
+        if (restoreResult.success) {
+          if (progressBar) {
+            this.updateProgress(progressFill, progressText, 100, this.i18n.t('dataManagement.restore.complete', 'Restore completed!'));
+            setTimeout(() => progressBar.classList.add('hidden'), 2000);
+          }
+          
+          // Refresh statistics
+          await this.loadStorageStats();
+          
+          this.showMessage('success', this.i18n.t('dataManagement.restore.success', 'Data restored successfully!'));
+          console.log('✅ Restore completed successfully');
+          
+          // Refresh the page to reload the restored data
+          setTimeout(() => {
+            window.location.reload();
+          }, 2000);
+        } else {
+          throw new Error(restoreResult.message || 'Restore failed');
+        }
+      } else if (result.cancelled) {
+        console.log('Restore cancelled by user');
+      } else {
+        throw new Error(result.message || 'File selection failed');
+      }
+
+    } catch (error) {
+      console.error('❌ Restore error:', error);
+      
+      const progressBar = document.getElementById('restore-progress');
+      if (progressBar) {
+        progressBar.classList.add('hidden');
+      }
+      
+      this.showMessage('error', this.i18n.t('dataManagement.restore.error', 'Restore failed: ') + error.message);
+    }
+  }
+        this.cancelRestore();
+      }, 2000);
+
+      this.showMessage('success', this.i18n.t('dataManagement.restore.success', 'Data restored successfully!'));
+      this.loadStorageStats();
+
+    } catch (error) {
+      console.error('Restore error:', error);
+      this.showMessage('error', this.i18n.t('dataManagement.restore.error', 'Error restoring data: ') + error.message);
+      
+      const progressBar = document.getElementById('restore-progress');
+      if (progressBar) progressBar.classList.add('hidden');
+    }
+  }
+
+  /**
+   * Perform the actual restore operation
+   */
+  async performRestore(backupData, mode, progressCallback) {
+    let progress = 10;
+    
+    progressCallback(progress, this.i18n.t('dataManagement.restore.preparing', 'Preparing restore...'));
+
+    // Clear existing data if replace mode
+    if (mode === 'replace') {
+      progressCallback(20, this.i18n.t('dataManagement.restore.clearing', 'Clearing existing data...'));
+      await window.electronAPI.invoke('clear-all-data');
+      progress = 30;
+    }
+
+    // Restore families
+    if (backupData.families && backupData.families.length > 0) {
+      progressCallback(progress, this.i18n.t('dataManagement.restore.restoringFamilies', 'Restoring families...'));
+      await window.electronAPI.invoke('restore-families', backupData.families, mode);
+      progress += 20;
+    }
+
+    // Restore members
+    if (backupData.members && backupData.members.length > 0) {
+      progressCallback(progress, this.i18n.t('dataManagement.restore.restoringMembers', 'Restoring family members...'));
+      await window.electronAPI.invoke('restore-members', backupData.members, mode);
+      progress += 20;
+    }
+
+    // Restore pedigrees
+    if (backupData.pedigrees && backupData.pedigrees.length > 0) {
+      progressCallback(progress, this.i18n.t('dataManagement.restore.restoringPedigrees', 'Restoring pedigrees...'));
+      await window.electronAPI.invoke('restore-pedigrees', backupData.pedigrees, mode);
+      progress += 20;
+    }
+
+    // Restore analyses
+    if (backupData.analyses && backupData.analyses.length > 0) {
+      progressCallback(progress, this.i18n.t('dataManagement.restore.restoringAnalyses', 'Restoring analyses...'));
+      await window.electronAPI.invoke('restore-analyses', backupData.analyses, mode);
+      progress += 10;
+    }
+
+    // Restore risk assessments
+    if (backupData.risks && backupData.risks.length > 0) {
+      progressCallback(progress, this.i18n.t('dataManagement.restore.restoringRisks', 'Restoring risk assessments...'));
+      await window.electronAPI.invoke('restore-risks', backupData.risks, mode);
+      progress += 10;
+    }
+  }
+
+  /**
+   * Cancel restore operation
+   */
+  cancelRestore() {
+    const preview = document.getElementById('restore-preview');
+    if (preview) {
+      preview.classList.add('hidden');
+    }
+    
+    this.selectedBackupData = null;
+    
+    // Reset file input
+    const fileInput = document.getElementById('backup-file-input');
+    if (fileInput) {
+      fileInput.value = '';
+    }
+  }
+
+  /**
+   * Load storage statistics
+   */
+  async loadStorageStats() {
+    try {
+      const stats = await window.electronAPI.invoke('get-storage-stats');
+      
+      document.getElementById('total-families-count').textContent = stats.totalFamilies || '0';
+      document.getElementById('total-members-count').textContent = stats.totalMembers || '0';
+      document.getElementById('total-pedigrees-count').textContent = stats.totalPedigrees || '0';
+      document.getElementById('db-size').textContent = stats.dbSize || 'Unknown';
+      
+      const lastBackup = localStorage.getItem('last-backup-date');
+      document.getElementById('last-backup-date').textContent = lastBackup 
+        ? new Date(lastBackup).toLocaleDateString()
+        : this.i18n.t('dataManagement.storage.never', 'Never');
+
+    } catch (error) {
+      console.error('Error loading storage stats:', error);
+    }
+  }
+
+  /**
+   * Clean up database
+   */
+  async cleanupDatabase() {
+    const confirmed = confirm(this.i18n.t('dataManagement.storage.confirmCleanup', 'This will remove orphaned records and optimize the database. Continue?'));
+    if (!confirmed) return;
+
+    try {
+      this.showMessage('info', this.i18n.t('dataManagement.storage.cleaning', 'Cleaning up database...'));
+      
+      const result = await window.electronAPI.invoke('cleanup-database');
+      
+      if (result.success) {
+        this.showMessage('success', this.i18n.t('dataManagement.storage.cleanupSuccess', 'Database cleaned up successfully!'));
+        this.loadStorageStats();
+      } else {
+        this.showMessage('error', result.message || this.i18n.t('dataManagement.storage.cleanupError', 'Cleanup failed'));
+      }
+
+    } catch (error) {
+      console.error('Cleanup error:', error);
+      this.showMessage('error', this.i18n.t('dataManagement.storage.cleanupError', 'Cleanup error: ') + error.message);
+    }
+  }
+
+  /**
+   * Update progress bar
+   */
+  updateProgress(progressFill, progressText, percentage, text) {
+    if (progressFill) {
+      progressFill.style.width = percentage + '%';
+    }
+    if (progressText) {
+      progressText.textContent = text;
+    }
+  }
+
+  /**
+   * Show status message
+   */
+  showMessage(type, message) {
+    const messagesContainer = document.getElementById('status-messages');
+    if (!messagesContainer) return;
+
+    const messageEl = document.createElement('div');
+    messageEl.className = `status-message ${type}`;
+    messageEl.textContent = message;
+
+    messagesContainer.appendChild(messageEl);
+
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+      messageEl.remove();
+    }, 5000);
+  }
+
+  /**
+   * Show the module
+   */
+  show() {
+    this.isVisible = true;
+    this.init();
+  }
+
+  /**
+   * Hide the module
+   */
+  hide() {
+    this.isVisible = false;
+  }
+}
+
+// Make available globally
+window.DataManagementModule = DataManagementModule;
+
+export default DataManagementModule;
