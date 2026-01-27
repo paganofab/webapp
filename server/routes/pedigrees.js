@@ -66,6 +66,36 @@ router.get("/by-name/:name", (req, res) => {
   }
 });
 
+router.get("/:id", (req, res) => {
+  try {
+    const pedigreeId = Number(req.params.id);
+    if (!pedigreeId) {
+      return res.status(400).json({ success: false, error: "Invalid pedigree id" });
+    }
+
+    const row = db
+      .prepare("SELECT * FROM pedigrees WHERE id = ? AND user_id = ?")
+      .get(pedigreeId, req.user.id);
+
+    if (!row) {
+      return res.status(404).json({ success: false, error: "Pedigree not found" });
+    }
+
+    return res.json({
+      success: true,
+      data: row.data,
+      metadata: {
+        id: row.id,
+        name: row.name,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 router.post("/", async (req, res) => {
   try {
     const {
