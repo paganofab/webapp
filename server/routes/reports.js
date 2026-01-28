@@ -361,4 +361,20 @@ router.get("/:reportId/pdf", (req, res) => {
   }
 });
 
+router.get("/:reportId/html", (req, res) => {
+  try {
+    const reportId = req.params.reportId;
+    const row = db.prepare(`
+      SELECT content FROM generated_reports WHERE report_id = ? AND user_id = ?
+    `).get(reportId, req.user.id);
+    if (!row || !row.content) {
+      return res.status(404).json({ error: "Report not found" });
+    }
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    return res.send(row.content);
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
 module.exports = router;
