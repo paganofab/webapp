@@ -304,9 +304,19 @@ router.post("/:id/variations", (req, res) => {
       return res.status(404).json({ error: "Pedigree not found" });
     }
 
+    const importPerson = db
+      .prepare(
+        "SELECT id FROM pedigree_import_person WHERE pedigree_id = ? AND external_id = ?"
+      )
+      .get(pedigreeId, String(personId));
+
+    if (!importPerson) {
+      return res.status(400).json({ error: "Import person not found for node id" });
+    }
+
     const insertStmt = db.prepare(`
       INSERT INTO pedigree_import_person_molecular_variation (
-        pedigree_id, person_id, gene, transcript, exon_intron, exon_intron_position,
+        pedigree_id, import_person_id, external_person_id, gene, transcript, exon_intron, exon_intron_position,
         g_change, c_change, p_change, zygosity, test_method, test_classification,
         clinvar_classification, var_id, rs, comments
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -314,7 +324,8 @@ router.post("/:id/variations", (req, res) => {
 
     const result = insertStmt.run(
       pedigreeId,
-      personId,
+      importPerson.id,
+      String(personId),
       variationData.gene || "",
       variationData.transcript || "",
       variationData.exon_intron || "",
@@ -352,11 +363,22 @@ router.get("/:id/variations", (req, res) => {
       return res.status(404).json({ error: "Pedigree not found" });
     }
 
+    const importPerson = db
+      .prepare(
+        "SELECT id FROM pedigree_import_person WHERE pedigree_id = ? AND external_id = ?"
+      )
+      .get(pedigreeId, String(personId));
+
+    if (!importPerson) {
+      return res.json({ success: true, variations: [] });
+    }
+
     const rows = db.prepare(`
-      SELECT * FROM pedigree_import_person_molecular_variation
-      WHERE pedigree_id = ? AND person_id = ?
+      SELECT *, external_person_id AS person_id
+      FROM pedigree_import_person_molecular_variation
+      WHERE pedigree_id = ? AND import_person_id = ?
       ORDER BY id DESC
-    `).all(pedigreeId, personId);
+    `).all(pedigreeId, importPerson.id);
 
     return res.json({ success: true, variations: rows });
   } catch (error) {
@@ -375,7 +397,7 @@ router.get("/:id/variations-all", (req, res) => {
     }
 
     const rows = db.prepare(`
-      SELECT id, person_id, gene, transcript, exon_intron, exon_intron_position,
+      SELECT id, external_person_id AS person_id, gene, transcript, exon_intron, exon_intron_position,
              g_change, c_change, p_change, zygosity, test_method, test_classification,
              clinvar_classification, var_id, rs, comments
       FROM pedigree_import_person_molecular_variation

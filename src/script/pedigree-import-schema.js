@@ -106,6 +106,8 @@ CREATE TABLE IF NOT EXISTS pedigree_import_person_hpo_term (
   FOREIGN KEY (hpo_id)    REFERENCES pedigree_import_hpo_term(id) ON DELETE CASCADE
 );
 
+CREATE INDEX IF NOT EXISTS idx_pedigree_import_person_hpo_pair ON pedigree_import_person_hpo_term(person_id, hpo_id);
+
 -- 7) Pedigree Import Genes
 -- Genetic markers and candidate genes
 CREATE TABLE IF NOT EXISTS pedigree_import_gene (
@@ -121,6 +123,8 @@ CREATE TABLE IF NOT EXISTS pedigree_import_person_gene (
   FOREIGN KEY (person_id) REFERENCES pedigree_import_person(id) ON DELETE CASCADE,
   FOREIGN KEY (gene_id)   REFERENCES pedigree_import_gene(id)   ON DELETE CASCADE
 );
+
+CREATE INDEX IF NOT EXISTS idx_pedigree_import_person_gene_pair ON pedigree_import_person_gene(person_id, gene_id);
 
 -- 8) Pedigree Import Sessions
 -- Track import sessions and metadata
@@ -323,7 +327,8 @@ CREATE INDEX IF NOT EXISTS idx_pedigree_import_risk_data_smoking ON pedigree_imp
 CREATE TABLE IF NOT EXISTS pedigree_import_person_molecular_variation (
   id                      INTEGER PRIMARY KEY AUTOINCREMENT,
   pedigree_id             INTEGER NOT NULL,        -- Link to pedigree
-  person_id               INTEGER NOT NULL,        -- Pedigree graph person ID (0=proband, 1, 2, etc.)
+  import_person_id        INTEGER NOT NULL,        -- FK to pedigree_import_person.id
+  external_person_id      TEXT,                    -- Graph node id for traceability
   
   -- Molecular Variation Fields
   gene                    TEXT,                    -- Gene symbol
@@ -345,13 +350,16 @@ CREATE TABLE IF NOT EXISTS pedigree_import_person_molecular_variation (
   created_at             DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at             DATETIME DEFAULT CURRENT_TIMESTAMP,
   
-  -- Foreign key constraints (only reference pedigrees, not import persons)
-  FOREIGN KEY (pedigree_id) REFERENCES pedigrees(id) ON DELETE CASCADE
+  -- Foreign key constraints
+  FOREIGN KEY (pedigree_id) REFERENCES pedigrees(id) ON DELETE CASCADE,
+  FOREIGN KEY (import_person_id) REFERENCES pedigree_import_person(id) ON DELETE CASCADE
 );
 
 -- Indexes for molecular variations
 CREATE INDEX IF NOT EXISTS idx_pedigree_import_molecular_pedigree_id ON pedigree_import_person_molecular_variation(pedigree_id);
-CREATE INDEX IF NOT EXISTS idx_pedigree_import_molecular_person_id ON pedigree_import_person_molecular_variation(person_id);
+CREATE INDEX IF NOT EXISTS idx_pedigree_import_molecular_import_person_id ON pedigree_import_person_molecular_variation(import_person_id);
+CREATE INDEX IF NOT EXISTS idx_pedigree_import_molecular_pedigree_import_person ON pedigree_import_person_molecular_variation(pedigree_id, import_person_id);
+CREATE INDEX IF NOT EXISTS idx_pedigree_import_molecular_external_person_id ON pedigree_import_person_molecular_variation(external_person_id);
 CREATE INDEX IF NOT EXISTS idx_pedigree_import_molecular_gene ON pedigree_import_person_molecular_variation(gene);
 CREATE INDEX IF NOT EXISTS idx_pedigree_import_molecular_test_classification ON pedigree_import_person_molecular_variation(test_classification);
 `;

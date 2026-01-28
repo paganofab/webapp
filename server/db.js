@@ -85,6 +85,149 @@ function runMigrations(dbInstance) {
         );
       },
     },
+    {
+      id: "2026-01-28-001-molecular-variations-import-person",
+      up: () => {
+        const columns = dbInstance
+          .prepare("PRAGMA table_info(pedigree_import_person_molecular_variation)")
+          .all()
+          .map((c) => c.name);
+
+        if (columns.length === 0) {
+          return;
+        }
+
+        if (columns.includes("import_person_id")) {
+          dbInstance.exec(
+            "CREATE INDEX IF NOT EXISTS idx_pedigree_import_person_gene_pair ON pedigree_import_person_gene(person_id, gene_id)"
+          );
+          dbInstance.exec(
+            "CREATE INDEX IF NOT EXISTS idx_pedigree_import_person_hpo_pair ON pedigree_import_person_hpo_term(person_id, hpo_id)"
+          );
+          return;
+        }
+
+        if (!columns.includes("person_id")) {
+          return;
+        }
+
+        const missing = dbInstance
+          .prepare(`
+            SELECT COUNT(*) AS cnt
+            FROM pedigree_import_person_molecular_variation mv
+            LEFT JOIN pedigree_import_person ip
+              ON ip.pedigree_id = mv.pedigree_id
+             AND ip.external_id = CAST(mv.person_id AS TEXT)
+            WHERE ip.id IS NULL
+          `)
+          .get().cnt;
+
+        if (missing > 0) {
+          throw new Error(
+            `Cannot migrate molecular variations: ${missing} rows missing import person mapping`
+          );
+        }
+
+        dbInstance.exec("BEGIN");
+        try {
+          dbInstance.exec(
+            "ALTER TABLE pedigree_import_person_molecular_variation RENAME TO pedigree_import_person_molecular_variation_old"
+          );
+
+          dbInstance.exec(`
+            CREATE TABLE IF NOT EXISTS pedigree_import_person_molecular_variation (
+              id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+              pedigree_id             INTEGER NOT NULL,
+              import_person_id        INTEGER NOT NULL,
+              external_person_id      TEXT,
+              gene                    TEXT,
+              transcript              TEXT,
+              exon_intron             TEXT,
+              exon_intron_position    TEXT,
+              g_change                TEXT,
+              c_change                TEXT,
+              p_change                TEXT,
+              zygosity                TEXT,
+              test_method             TEXT,
+              test_classification     TEXT,
+              clinvar_classification  TEXT,
+              var_id                  TEXT,
+              rs                      TEXT,
+              comments                TEXT,
+              created_at              DATETIME DEFAULT CURRENT_TIMESTAMP,
+              updated_at              DATETIME DEFAULT CURRENT_TIMESTAMP,
+              FOREIGN KEY (pedigree_id) REFERENCES pedigrees(id) ON DELETE CASCADE,
+              FOREIGN KEY (import_person_id) REFERENCES pedigree_import_person(id) ON DELETE CASCADE
+            );
+          `);
+
+          dbInstance.exec(`
+            INSERT INTO pedigree_import_person_molecular_variation (
+              id, pedigree_id, import_person_id, external_person_id,
+              gene, transcript, exon_intron, exon_intron_position,
+              g_change, c_change, p_change, zygosity, test_method, test_classification,
+              clinvar_classification, var_id, rs, comments, created_at, updated_at
+            )
+            SELECT
+              mv.id,
+              mv.pedigree_id,
+              ip.id AS import_person_id,
+              CAST(mv.person_id AS TEXT) AS external_person_id,
+              mv.gene,
+              mv.transcript,
+              mv.exon_intron,
+              mv.exon_intron_position,
+              mv.g_change,
+              mv.c_change,
+              mv.p_change,
+              mv.zygosity,
+              mv.test_method,
+              mv.test_classification,
+              mv.clinvar_classification,
+              mv.var_id,
+              mv.rs,
+              mv.comments,
+              mv.created_at,
+              mv.updated_at
+            FROM pedigree_import_person_molecular_variation_old mv
+            JOIN pedigree_import_person ip
+              ON ip.pedigree_id = mv.pedigree_id
+             AND ip.external_id = CAST(mv.person_id AS TEXT);
+          `);
+
+          dbInstance.exec(
+            "CREATE INDEX IF NOT EXISTS idx_pedigree_import_molecular_pedigree_id ON pedigree_import_person_molecular_variation(pedigree_id)"
+          );
+          dbInstance.exec(
+            "CREATE INDEX IF NOT EXISTS idx_pedigree_import_molecular_import_person_id ON pedigree_import_person_molecular_variation(import_person_id)"
+          );
+          dbInstance.exec(
+            "CREATE INDEX IF NOT EXISTS idx_pedigree_import_molecular_pedigree_import_person ON pedigree_import_person_molecular_variation(pedigree_id, import_person_id)"
+          );
+          dbInstance.exec(
+            "CREATE INDEX IF NOT EXISTS idx_pedigree_import_molecular_external_person_id ON pedigree_import_person_molecular_variation(external_person_id)"
+          );
+          dbInstance.exec(
+            "CREATE INDEX IF NOT EXISTS idx_pedigree_import_molecular_gene ON pedigree_import_person_molecular_variation(gene)"
+          );
+          dbInstance.exec(
+            "CREATE INDEX IF NOT EXISTS idx_pedigree_import_molecular_test_classification ON pedigree_import_person_molecular_variation(test_classification)"
+          );
+          dbInstance.exec(
+            "CREATE INDEX IF NOT EXISTS idx_pedigree_import_person_gene_pair ON pedigree_import_person_gene(person_id, gene_id)"
+          );
+          dbInstance.exec(
+            "CREATE INDEX IF NOT EXISTS idx_pedigree_import_person_hpo_pair ON pedigree_import_person_hpo_term(person_id, hpo_id)"
+          );
+
+          dbInstance.exec("DROP TABLE pedigree_import_person_molecular_variation_old");
+          dbInstance.exec("COMMIT");
+        } catch (error) {
+          dbInstance.exec("ROLLBACK");
+          throw error;
+        }
+      },
+    },
   ];
 
   const insertStmt = dbInstance.prepare(
