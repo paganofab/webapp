@@ -411,6 +411,61 @@ router.get("/:id/variations-all", (req, res) => {
   }
 });
 
+router.get("/:id/people", (req, res) => {
+  try {
+    const pedigreeId = Number(req.params.id);
+    const pedigree = db
+      .prepare("SELECT id FROM pedigrees WHERE id = ? AND user_id = ?")
+      .get(pedigreeId, req.user.id);
+    if (!pedigree) {
+      return res.status(404).json({ error: "Pedigree not found" });
+    }
+
+    const rows = db.prepare(`
+      SELECT
+        ip.id,
+        ip.external_id,
+        ip.f_name,
+        ip.l_name,
+        ip.gender,
+        ip.dob,
+        ip.dod,
+        ip.life_status,
+        ip.evaluated,
+        ip.comments,
+        ip.generation,
+        ip.position_x,
+        GROUP_CONCAT(DISTINCT d.name) AS disorders,
+        GROUP_CONCAT(DISTINCT h.term) AS hpo_terms,
+        GROUP_CONCAT(DISTINCT g.symbol) AS genes,
+        GROUP_CONCAT(DISTINCT
+          TRIM(
+            COALESCE(mv.gene, '') ||
+            CASE WHEN mv.c_change IS NOT NULL AND mv.c_change <> '' THEN ' ' || mv.c_change ELSE '' END ||
+            CASE WHEN mv.p_change IS NOT NULL AND mv.p_change <> '' THEN ' ' || mv.p_change ELSE '' END ||
+            CASE WHEN mv.g_change IS NOT NULL AND mv.g_change <> '' THEN ' ' || mv.g_change ELSE '' END
+          )
+        ) AS molecular_variations
+      FROM pedigree_import_person ip
+      LEFT JOIN pedigree_import_person_disorder ipd ON ipd.person_id = ip.id
+      LEFT JOIN pedigree_import_disorder d ON d.id = ipd.disorder_id
+      LEFT JOIN pedigree_import_person_hpo_term iph ON iph.person_id = ip.id
+      LEFT JOIN pedigree_import_hpo_term h ON h.id = iph.hpo_id
+      LEFT JOIN pedigree_import_person_gene ipg ON ipg.person_id = ip.id
+      LEFT JOIN pedigree_import_gene g ON g.id = ipg.gene_id
+      LEFT JOIN pedigree_import_person_molecular_variation mv
+        ON mv.import_person_id = ip.id AND mv.pedigree_id = ip.pedigree_id
+      WHERE ip.pedigree_id = ?
+      GROUP BY ip.id
+      ORDER BY ip.generation, ip.external_id
+    `).all(pedigreeId);
+
+    return res.json({ success: true, people: rows });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 router.delete("/variations/:variationId", (req, res) => {
   try {
     const variationId = Number(req.params.variationId);
