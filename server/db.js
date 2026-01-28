@@ -245,6 +245,125 @@ function runMigrations(dbInstance) {
         );
       },
     },
+    {
+      id: "2026-01-28-003-report-user-columns",
+      up: () => {
+        const templateCols = dbInstance
+          .prepare("PRAGMA table_info(report_templates)")
+          .all()
+          .map((c) => c.name);
+        if (!templateCols.includes("user_id")) {
+          dbInstance.exec("ALTER TABLE report_templates ADD COLUMN user_id INTEGER");
+        }
+        if (!templateCols.includes("language")) {
+          dbInstance.exec("ALTER TABLE report_templates ADD COLUMN language TEXT DEFAULT 'pt-BR'");
+        }
+
+        const reportCols = dbInstance
+          .prepare("PRAGMA table_info(generated_reports)")
+          .all()
+          .map((c) => c.name);
+        if (!reportCols.includes("person_external_id")) {
+          dbInstance.exec("ALTER TABLE generated_reports ADD COLUMN person_external_id TEXT");
+        }
+        if (!reportCols.includes("file_path")) {
+          dbInstance.exec("ALTER TABLE generated_reports ADD COLUMN file_path TEXT");
+        }
+        if (!reportCols.includes("user_id")) {
+          dbInstance.exec("ALTER TABLE generated_reports ADD COLUMN user_id INTEGER");
+        }
+      },
+    },
+    {
+      id: "2026-01-28-004-default-report-template",
+      up: () => {
+        const count = dbInstance
+          .prepare("SELECT COUNT(*) AS cnt FROM report_templates WHERE is_system = 1")
+          .get().cnt;
+        if (count > 0) return;
+
+        const templateId = "tpl_system_default";
+        const content = `
+<div style="font-family: Arial, sans-serif; color: #1f2a44;">
+  <h1>Relatorio do paciente</h1>
+  <p><strong>Paciente:</strong> {{patient.name}}</p>
+  <p><strong>Sexo:</strong> {{patient.gender}}</p>
+  <p><strong>Nascimento:</strong> {{patient.dob}}</p>
+  <p><strong>Observacoes:</strong> {{patient.comments}}</p>
+
+  <h2>Disorders</h2>
+  <ul>
+    {{#each patient.disorders}}
+      <li>{{this}}</li>
+    {{/each}}
+  </ul>
+
+  <h2>HPO</h2>
+  <ul>
+    {{#each patient.hpo_terms}}
+      <li>{{this}}</li>
+    {{/each}}
+  </ul>
+
+  <h2>Genes</h2>
+  <ul>
+    {{#each patient.genes}}
+      <li>{{this}}</li>
+    {{/each}}
+  </ul>
+
+  <h2>Variacoes moleculares</h2>
+  <table style="width: 100%; border-collapse: collapse;">
+    <thead>
+      <tr>
+        <th style="border: 1px solid #ccd3e0; padding: 6px;">Gene</th>
+        <th style="border: 1px solid #ccd3e0; padding: 6px;">c.</th>
+        <th style="border: 1px solid #ccd3e0; padding: 6px;">p.</th>
+        <th style="border: 1px solid #ccd3e0; padding: 6px;">Zigosidade</th>
+        <th style="border: 1px solid #ccd3e0; padding: 6px;">Classificacao</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{#each patient.molecular_variations}}
+      <tr>
+        <td style="border: 1px solid #ccd3e0; padding: 6px;">{{gene}}</td>
+        <td style="border: 1px solid #ccd3e0; padding: 6px;">{{c_change}}</td>
+        <td style="border: 1px solid #ccd3e0; padding: 6px;">{{p_change}}</td>
+        <td style="border: 1px solid #ccd3e0; padding: 6px;">{{zygosity}}</td>
+        <td style="border: 1px solid #ccd3e0; padding: 6px;">{{test_classification}}</td>
+      </tr>
+      {{/each}}
+    </tbody>
+  </table>
+
+  <h2>Pedigree</h2>
+  <table style="width: 100%; border-collapse: collapse;">
+    <thead>
+      <tr>
+        <th style="border: 1px solid #ccd3e0; padding: 6px;">Node</th>
+        <th style="border: 1px solid #ccd3e0; padding: 6px;">Nome</th>
+        <th style="border: 1px solid #ccd3e0; padding: 6px;">Sexo</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{#each pedigree.people}}
+      <tr>
+        <td style="border: 1px solid #ccd3e0; padding: 6px;">{{external_id}}</td>
+        <td style="border: 1px solid #ccd3e0; padding: 6px;">{{name}}</td>
+        <td style="border: 1px solid #ccd3e0; padding: 6px;">{{gender}}</td>
+      </tr>
+      {{/each}}
+    </tbody>
+  </table>
+</div>
+`;
+
+        dbInstance.prepare(`
+          INSERT INTO report_templates (template_id, name, description, content, is_system, created_by, language)
+          VALUES (?, ?, ?, ?, 1, 'system', 'pt-BR')
+        `).run(templateId, "Relatorio base", "Template padrao para testes", content);
+      },
+    },
   ];
 
   const insertStmt = dbInstance.prepare(

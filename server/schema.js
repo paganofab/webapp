@@ -347,6 +347,8 @@ CREATE TABLE IF NOT EXISTS report_templates (
   variables TEXT,
   is_system INTEGER DEFAULT 0,
   created_by TEXT,
+  user_id INTEGER,
+  language TEXT DEFAULT 'pt-BR',
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -357,11 +359,14 @@ CREATE TABLE IF NOT EXISTS generated_reports (
   template_id TEXT,
   pedigree_id INTEGER,
   family_id INTEGER,
+  person_external_id TEXT,
   title TEXT,
   content TEXT,
   status TEXT,
   format TEXT,
   metadata TEXT,
+  file_path TEXT,
+  user_id INTEGER,
   generated_by TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
