@@ -338,7 +338,7 @@ router.post("/:id/variations", (req, res) => {
         pedigree_id, import_person_id, external_person_id, gene, transcript, exon_intron, exon_intron_position,
         g_change, c_change, p_change, zygosity, test_method, test_classification,
         clinvar_classification, var_id, rs, comments
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const result = insertStmt.run(
