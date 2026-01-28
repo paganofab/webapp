@@ -4,6 +4,7 @@ const { initDb } = require("./db");
 const { requireAuth } = require("./auth");
 const authRoutes = require("./routes/auth");
 const pedigreeRoutes = require("./routes/pedigrees");
+const settingsRoutes = require("./routes/settings");
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -19,6 +20,7 @@ app.get("/health", (req, res) => {
 
 app.use("/api/auth", authRoutes);
 app.use("/api/pedigrees", requireAuth, pedigreeRoutes);
+app.use("/api/settings", requireAuth, settingsRoutes);
 
 app.listen(PORT, () => {
   console.log(`Pedigree API listening on :${PORT}`);

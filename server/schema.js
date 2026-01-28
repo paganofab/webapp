@@ -14,6 +14,16 @@ CREATE TABLE IF NOT EXISTS settings (
   value TEXT
 );
 
+CREATE TABLE IF NOT EXISTS user_settings (
+  user_id INTEGER NOT NULL,
+  key TEXT NOT NULL,
+  value TEXT,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (user_id, key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_settings_user ON user_settings(user_id);
+
 -- Family members table for Family Center module
 CREATE TABLE IF NOT EXISTS family_members (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

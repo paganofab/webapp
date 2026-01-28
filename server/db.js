@@ -228,6 +228,23 @@ function runMigrations(dbInstance) {
         }
       },
     },
+    {
+      id: "2026-01-28-002-user-settings",
+      up: () => {
+        dbInstance.exec(`
+          CREATE TABLE IF NOT EXISTS user_settings (
+            user_id INTEGER NOT NULL,
+            key TEXT NOT NULL,
+            value TEXT,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (user_id, key)
+          );
+        `);
+        dbInstance.exec(
+          "CREATE INDEX IF NOT EXISTS idx_user_settings_user ON user_settings(user_id)"
+        );
+      },
+    },
   ];
 
   const insertStmt = dbInstance.prepare(
