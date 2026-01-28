@@ -416,6 +416,56 @@ function processPedigreeFromDatabase(db, pedigreeName) {
 }
 
 /**
+ * Process a pedigree from the pedigrees table by ID and import it into the new schema
+ * @param {Database} db - better-sqlite3 database instance
+ * @param {number} pedigreeId - ID of the pedigree to process
+ * @returns {Object} Processing results
+ */
+function processPedigreeFromDatabaseById(db, pedigreeId) {
+  try {
+    console.log(`Processing pedigree by id: ${pedigreeId}`);
+
+    const getPedigree = db.prepare('SELECT * FROM pedigrees WHERE id = ?');
+    const pedigreeRecord = getPedigree.get(pedigreeId);
+
+    if (!pedigreeRecord) {
+      throw new Error(`Pedigree "${pedigreeId}" not found`);
+    }
+
+    let graph;
+    try {
+      graph = JSON.parse(pedigreeRecord.data);
+    } catch (parseError) {
+      throw new Error(`Invalid JSON data in pedigree "${pedigreeId}": ${parseError.message}`);
+    }
+
+    const decodedPersons = decodePedigreeToPersons(graph);
+    console.log(`Decoded ${decodedPersons.length} persons from pedigree graph`);
+
+    const sessionName = `${pedigreeRecord.name}_import_${Date.now()}`;
+    const result = importPedigreeData(db, graph, decodedPersons, sessionName, pedigreeRecord.name, pedigreeRecord.id);
+
+    return {
+      success: true,
+      pedigreeName: pedigreeRecord.name,
+      pedigreeId: pedigreeRecord.id,
+      sessionId: result.sessionId,
+      personsImported: result.personsImported,
+      partnershipsImported: result.partnershipsImported,
+      message: `Successfully imported pedigree "${pedigreeRecord.name}" into import tables`
+    };
+  } catch (error) {
+    console.error(`Error processing pedigree "${pedigreeId}":`, error);
+    return {
+      success: false,
+      pedigreeId,
+      error: error.message,
+      message: `Failed to import pedigree "${pedigreeId}": ${error.message}`
+    };
+  }
+}
+
+/**
  * Get import session statistics
  * @param {Database} db - better-sqlite3 database instance
  * @param {number} sessionId - Session ID to get stats for
@@ -446,5 +496,6 @@ module.exports = {
   decodePedigreeToPersons,
   importPedigreeData,
   processPedigreeFromDatabase,
+  processPedigreeFromDatabaseById,
   getImportSessionStats
 };

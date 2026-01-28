@@ -3,6 +3,7 @@ const path = require("path");
 const fs = require("fs");
 const { initDb } = require("../db");
 const { performBackgroundPedigreeProcessing } = require("../pedigreeProcessing");
+const { processPedigreeFromDatabaseById } = require("../../src/script/pedigree-decoder-import");
 
 const router = express.Router();
 const db = initDb();
@@ -304,11 +305,21 @@ router.post("/:id/variations", (req, res) => {
       return res.status(404).json({ error: "Pedigree not found" });
     }
 
-    const importPerson = db
+    let importPerson = db
       .prepare(
         "SELECT id FROM pedigree_import_person WHERE pedigree_id = ? AND external_id = ?"
       )
       .get(pedigreeId, String(personId));
+
+    if (!importPerson) {
+      // Attempt on-demand import if background processing hasn't created import persons yet
+      processPedigreeFromDatabaseById(db, pedigreeId);
+      importPerson = db
+        .prepare(
+          "SELECT id FROM pedigree_import_person WHERE pedigree_id = ? AND external_id = ?"
+        )
+        .get(pedigreeId, String(personId));
+    }
 
     if (!importPerson) {
       return res.status(400).json({ error: "Import person not found for node id" });
