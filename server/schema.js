@@ -349,6 +349,7 @@ CREATE TABLE IF NOT EXISTS report_templates (
   created_by TEXT,
   user_id INTEGER,
   language TEXT DEFAULT 'pt-BR',
+  format TEXT DEFAULT 'html',
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );

@@ -364,6 +364,19 @@ function runMigrations(dbInstance) {
         `).run(templateId, "Relatorio base", "Template padrao para testes", content);
       },
     },
+    {
+      id: "2026-01-28-005-report-template-format",
+      up: () => {
+        const templateCols = dbInstance
+          .prepare("PRAGMA table_info(report_templates)")
+          .all()
+          .map((c) => c.name);
+        if (!templateCols.includes("format")) {
+          dbInstance.exec("ALTER TABLE report_templates ADD COLUMN format TEXT DEFAULT 'html'");
+          dbInstance.exec("UPDATE report_templates SET format = 'html' WHERE format IS NULL");
+        }
+      },
+    },
   ];
 
   const insertStmt = dbInstance.prepare(

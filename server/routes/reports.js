@@ -2,10 +2,16 @@ const express = require("express");
 const path = require("path");
 const fs = require("fs");
 const Handlebars = require("handlebars");
+const MarkdownIt = require("markdown-it");
 const { initDb } = require("../db");
 
 const router = express.Router();
 const db = initDb();
+const markdown = new MarkdownIt({
+  html: false,
+  linkify: true,
+  typographer: true,
+});
 
 function ensureReportsDir() {
   const base = process.env.REPORT_DIR || path.join(__dirname, "..", "..", "data", "reports");
@@ -154,15 +160,19 @@ function buildReportData(pedigreeId, personExternalId) {
   };
 }
 
-function renderTemplate(templateContent, data) {
+function renderTemplate(templateContent, data, format = "html") {
   const compiled = Handlebars.compile(templateContent);
-  return compiled(data);
+  const rendered = compiled(data);
+  if (format === "markdown") {
+    return markdown.render(rendered);
+  }
+  return rendered;
 }
 
 router.get("/templates", (req, res) => {
   try {
     const rows = db.prepare(`
-      SELECT id, template_id, name, description, language, created_at, updated_at
+      SELECT id, template_id, name, description, language, format, created_at, updated_at
       FROM report_templates
       WHERE user_id = ? OR is_system = 1
       ORDER BY created_at DESC
@@ -177,7 +187,7 @@ router.get("/templates/:id", (req, res) => {
   try {
     const id = req.params.id;
     const row = db.prepare(`
-      SELECT id, template_id, name, description, language, content, created_at, updated_at
+      SELECT id, template_id, name, description, language, format, content, created_at, updated_at
       FROM report_templates
       WHERE (id = ? OR template_id = ?) AND (user_id = ? OR is_system = 1)
     `).get(id, id, req.user.id);
@@ -210,15 +220,15 @@ router.get("/", (req, res) => {
 
 router.post("/templates", (req, res) => {
   try {
-    const { name, description, content, language = "pt-BR" } = req.body || {};
+    const { name, description, content, language = "pt-BR", format = "markdown" } = req.body || {};
     if (!name || !content) {
       return res.status(400).json({ success: false, error: "name and content required" });
     }
     const templateId = `tpl_${Date.now()}`;
     db.prepare(`
-      INSERT INTO report_templates (template_id, name, description, content, user_id, language)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(templateId, name, description || "", content, req.user.id, language);
+      INSERT INTO report_templates (template_id, name, description, content, user_id, language, format)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(templateId, name, description || "", content, req.user.id, language, format);
     return res.json({ success: true, template_id: templateId });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
@@ -227,7 +237,7 @@ router.post("/templates", (req, res) => {
 
 router.put("/templates/:id", (req, res) => {
   try {
-    const { name, description, content, language = "pt-BR" } = req.body || {};
+    const { name, description, content, language = "pt-BR", format = "markdown" } = req.body || {};
     const id = req.params.id;
     const template = db.prepare(`
       SELECT id FROM report_templates WHERE (id = ? OR template_id = ?) AND user_id = ?
@@ -236,9 +246,9 @@ router.put("/templates/:id", (req, res) => {
 
     db.prepare(`
       UPDATE report_templates
-      SET name = ?, description = ?, content = ?, language = ?, updated_at = CURRENT_TIMESTAMP
+      SET name = ?, description = ?, content = ?, language = ?, format = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ? OR template_id = ?
-    `).run(name, description || "", content, language, id, id);
+    `).run(name, description || "", content, language, format, id, id);
     return res.json({ success: true });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
@@ -266,18 +276,20 @@ router.post("/preview", (req, res) => {
     if (!data) return res.status(404).json({ success: false, error: "Person not found" });
 
     let templateContent = content;
+    let templateFormat = req.body?.format || "html";
     if (!templateContent && templateId) {
       const row = db.prepare(`
-        SELECT content FROM report_templates WHERE (id = ? OR template_id = ?) AND (user_id = ? OR is_system = 1)
+        SELECT content, format FROM report_templates WHERE (id = ? OR template_id = ?) AND (user_id = ? OR is_system = 1)
       `).get(templateId, templateId, req.user.id);
       templateContent = row?.content || "";
+      templateFormat = row?.format || "html";
     }
 
     if (!templateContent) {
       return res.status(400).json({ success: false, error: "Template content required" });
     }
 
-    const html = renderTemplate(templateContent, data);
+    const html = renderTemplate(templateContent, data, templateFormat);
     return res.json({ success: true, html });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
@@ -291,18 +303,20 @@ router.post("/generate", async (req, res) => {
     if (!data) return res.status(404).json({ success: false, error: "Person not found" });
 
     let templateContent = content;
+    let templateFormat = req.body?.format || "html";
     if (!templateContent && templateId) {
       const row = db.prepare(`
-        SELECT content FROM report_templates WHERE (id = ? OR template_id = ?) AND (user_id = ? OR is_system = 1)
+        SELECT content, format FROM report_templates WHERE (id = ? OR template_id = ?) AND (user_id = ? OR is_system = 1)
       `).get(templateId, templateId, req.user.id);
       templateContent = row?.content || "";
+      templateFormat = row?.format || "html";
     }
 
     if (!templateContent) {
       return res.status(400).json({ success: false, error: "Template content required" });
     }
 
-    const html = renderTemplate(templateContent, data);
+    const html = renderTemplate(templateContent, data, templateFormat);
     let filePath = null;
 
     if (format === "pdf") {
