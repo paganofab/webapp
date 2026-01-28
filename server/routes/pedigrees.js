@@ -305,20 +305,28 @@ router.post("/:id/variations", (req, res) => {
       return res.status(404).json({ error: "Pedigree not found" });
     }
 
-    let importPerson = db
-      .prepare(
-        "SELECT id FROM pedigree_import_person WHERE pedigree_id = ? AND external_id = ?"
-      )
-      .get(pedigreeId, String(personId));
+    const personIdStr = String(personId);
+    const candidates = new Set([personIdStr]);
+    if (!personIdStr.includes(".")) {
+      candidates.add(`${personIdStr}.0`);
+    }
+    if (personIdStr.endsWith(".0")) {
+      candidates.add(personIdStr.replace(/\.0$/, ""));
+    }
+    const candidateList = Array.from(candidates);
+
+    const importPersonLookup = db.prepare(
+      `SELECT id FROM pedigree_import_person
+       WHERE pedigree_id = ?
+         AND external_id IN (${candidateList.map(() => "?").join(",")})`
+    );
+
+    let importPerson = importPersonLookup.get(pedigreeId, ...candidateList);
 
     if (!importPerson) {
       // Attempt on-demand import if background processing hasn't created import persons yet
       processPedigreeFromDatabaseById(db, pedigreeId);
-      importPerson = db
-        .prepare(
-          "SELECT id FROM pedigree_import_person WHERE pedigree_id = ? AND external_id = ?"
-        )
-        .get(pedigreeId, String(personId));
+      importPerson = importPersonLookup.get(pedigreeId, ...candidateList);
     }
 
     if (!importPerson) {
@@ -374,11 +382,21 @@ router.get("/:id/variations", (req, res) => {
       return res.status(404).json({ error: "Pedigree not found" });
     }
 
-    const importPerson = db
-      .prepare(
-        "SELECT id FROM pedigree_import_person WHERE pedigree_id = ? AND external_id = ?"
-      )
-      .get(pedigreeId, String(personId));
+    const personIdStr = String(personId);
+    const candidates = new Set([personIdStr]);
+    if (!personIdStr.includes(".")) {
+      candidates.add(`${personIdStr}.0`);
+    }
+    if (personIdStr.endsWith(".0")) {
+      candidates.add(personIdStr.replace(/\.0$/, ""));
+    }
+    const candidateList = Array.from(candidates);
+
+    const importPerson = db.prepare(
+      `SELECT id FROM pedigree_import_person
+       WHERE pedigree_id = ?
+         AND external_id IN (${candidateList.map(() => "?").join(",")})`
+    ).get(pedigreeId, ...candidateList);
 
     if (!importPerson) {
       return res.json({ success: true, variations: [] });
