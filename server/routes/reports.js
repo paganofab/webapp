@@ -188,6 +188,26 @@ router.get("/templates/:id", (req, res) => {
   }
 });
 
+router.get("/", (req, res) => {
+  try {
+    const pedigreeId = req.query.pedigreeId ? Number(req.query.pedigreeId) : null;
+    if (!pedigreeId) {
+      return res.status(400).json({ success: false, error: "pedigreeId required" });
+    }
+
+    const rows = db.prepare(`
+      SELECT report_id, template_id, pedigree_id, person_external_id, title, format, created_at
+      FROM generated_reports
+      WHERE pedigree_id = ? AND user_id = ?
+      ORDER BY created_at DESC
+    `).all(pedigreeId, req.user.id);
+
+    return res.json({ success: true, reports: rows });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 router.post("/templates", (req, res) => {
   try {
     const { name, description, content, language = "pt-BR" } = req.body || {};
