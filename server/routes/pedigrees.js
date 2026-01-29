@@ -4,6 +4,7 @@ const fs = require("fs");
 const { initDb } = require("../db");
 const { performBackgroundPedigreeProcessing } = require("../pedigreeProcessing");
 const { processPedigreeFromDatabaseById } = require("../../src/script/pedigree-decoder-import");
+const { importFHIRToPedigreeEnhanced } = require("../../src/enhanced-standalone-fhir-importer");
 
 const router = express.Router();
 const db = initDb();
@@ -61,6 +62,91 @@ router.get("/by-name/:name", (req, res) => {
         created_at: row.created_at,
         updated_at: row.updated_at,
       },
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+router.post("/webform/import", (req, res) => {
+  try {
+    const { sessionId, patientName, rawData, fhirData, completionDate } = req.body || {};
+
+    if (!sessionId || !fhirData) {
+      return res.status(400).json({ success: false, error: "sessionId and fhirData required" });
+    }
+
+    const existing = db.prepare(`
+      SELECT f.id AS family_id, f.pedigree_id
+      FROM webform_data w
+      JOIN families f ON f.id = w.family_id
+      JOIN pedigrees p ON p.id = f.pedigree_id
+      WHERE w.session_id = ? AND p.user_id = ?
+      LIMIT 1
+    `).get(sessionId, req.user.id);
+
+    if (existing) {
+      return res.status(409).json({
+        success: false,
+        error: "Session already imported",
+        pedigreeId: existing.pedigree_id,
+        familyId: existing.family_id
+      });
+    }
+
+    const fhirString = typeof fhirData === "string" ? fhirData : JSON.stringify(fhirData);
+    const rawString = typeof rawData === "string" ? rawData : JSON.stringify(rawData || {});
+
+    const baseName = (patientName || "").trim() || "Webform Family";
+    let pedigreeName = `${baseName}-F`;
+
+    const nameExists = db
+      .prepare("SELECT id FROM pedigrees WHERE name = ? AND user_id = ?")
+      .get(pedigreeName, req.user.id);
+    if (nameExists) {
+      pedigreeName = `${pedigreeName}-${Date.now()}`;
+    }
+
+    const importResult = importFHIRToPedigreeEnhanced(fhirString, pedigreeName);
+    if (!importResult.success) {
+      return res.status(400).json({ success: false, error: importResult.error || "FHIR import failed" });
+    }
+
+    const dataString = JSON.stringify(importResult.pedigreeData);
+    const insertPedigree = db.prepare(`
+      INSERT INTO pedigrees (name, data, user_id, created_at, updated_at)
+      VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `);
+    const pedigreeInsert = insertPedigree.run(pedigreeName, dataString, req.user.id);
+    const pedigreeId = pedigreeInsert.lastInsertRowid;
+
+    const familyInsert = db.prepare(`
+      INSERT INTO families (name, proband_name, total_members, generations, created_date, last_updated, pedigree_id)
+      VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?)
+    `);
+    const familyResult = familyInsert.run(
+      pedigreeName,
+      baseName,
+      importResult.metadata?.personNodes || 0,
+      (importResult.metadata?.maxRank || 0) + 1,
+      pedigreeId
+    );
+    const familyId = familyResult.lastInsertRowid;
+
+    db.prepare(`
+      INSERT INTO webform_data (family_id, session_id, fhir_data, raw_data, completion_date)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(familyId, sessionId, fhirString, rawString, completionDate || null);
+
+    setImmediate(() => {
+      performBackgroundPedigreeProcessing(db, pedigreeName, importResult.pedigreeData, pedigreeId);
+    });
+
+    return res.json({
+      success: true,
+      pedigreeId,
+      familyId,
+      name: pedigreeName
     });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
