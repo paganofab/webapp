@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS pedigree_import_person (
   childless_status TEXT,                    -- e.g. 'infertile'
   carrier_status   TEXT,                    -- e.g. 'carrier','affected','presymptomatic'
   comments         TEXT,
+  is_proband       INTEGER DEFAULT 0,
   generation       INTEGER,                 -- from graph.ranks[id]
   position_x       REAL,                    -- from graph.positions[id] if used
   UNIQUE(pedigree_id, external_id)          -- ensure unique person per pedigree

@@ -229,6 +229,21 @@ function runMigrations(dbInstance) {
       },
     },
     {
+      id: "2026-01-30-001-import-person-proband",
+      up: () => {
+        const columns = dbInstance
+          .prepare("PRAGMA table_info(pedigree_import_person)")
+          .all()
+          .map((c) => c.name);
+
+        if (!columns.includes("is_proband")) {
+          dbInstance.exec(
+            "ALTER TABLE pedigree_import_person ADD COLUMN is_proband INTEGER DEFAULT 0"
+          );
+        }
+      },
+    },
+    {
       id: "2026-01-28-002-user-settings",
       up: () => {
         dbInstance.exec(`

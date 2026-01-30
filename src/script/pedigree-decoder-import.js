@@ -147,6 +147,15 @@ function decodePedigreeToPersons(graph) {
   return persons;
 }
 
+function isProbandPerson(person) {
+  return (
+    person?.proband === true ||
+    person?.isProband === true ||
+    person?.probandArrow === true ||
+    person?.id === 0
+  );
+}
+
 /**
  * Import decoded pedigree data into the database tables
  * @param {Database} db - better-sqlite3 database instance
@@ -185,14 +194,15 @@ function importPedigreeData(db, graph, decodedPersons, sessionName, sourceInfo, 
     const insertPerson = db.prepare(`
       INSERT INTO pedigree_import_person
       (pedigree_id, external_id, f_name, l_name, gender, dob, dod, life_status, evaluated, 
-       childless_status, carrier_status, comments, generation, position_x)
+       childless_status, carrier_status, comments, is_proband, generation, position_x)
       VALUES (@pedigree_id, @external_id, @f_name, @l_name, @gender, @dob, @dod, @life_status, 
-              @evaluated, @childless_status, @carrier_status, @comments, @generation, @position_x)
+              @evaluated, @childless_status, @carrier_status, @comments, @is_proband, @generation, @position_x)
       ON CONFLICT(pedigree_id, external_id) DO UPDATE SET
         f_name=excluded.f_name, l_name=excluded.l_name,
         gender=excluded.gender, dob=excluded.dob, dod=excluded.dod, life_status=excluded.life_status,
         evaluated=excluded.evaluated, childless_status=excluded.childless_status,
         carrier_status=excluded.carrier_status, comments=excluded.comments,
+        is_proband=excluded.is_proband,
         generation=excluded.generation, position_x=excluded.position_x
       RETURNING id
     `);
@@ -209,7 +219,12 @@ function importPedigreeData(db, graph, decodedPersons, sessionName, sourceInfo, 
     // Map from original person IDs to database IDs
     const personIdMap = new Map();
 
+    let probandExternalId = null;
     for (const p of decodedPersons) {
+      const probandFlag = isProbandPerson(p);
+      if (probandFlag && probandExternalId === null) {
+        probandExternalId = p.id;
+      }
       insertPerson.run({
         pedigree_id: pedigreeId, // Link person to pedigree family
         external_id: p.id, // Original person ID within the pedigree graph
@@ -223,6 +238,7 @@ function importPedigreeData(db, graph, decodedPersons, sessionName, sourceInfo, 
         childless_status: p.childlessStatus || null,
         carrier_status: p.carrierStatus || null,
         comments: p.comments || p.notes || null,
+        is_proband: probandFlag ? 1 : 0,
         generation: Number.isFinite(p.generation) ? p.generation : null,
         position_x: Number.isFinite(p.positionX) ? p.positionX : null
       });
@@ -233,6 +249,22 @@ function importPedigreeData(db, graph, decodedPersons, sessionName, sourceInfo, 
         const personDbId = personRecord.id;
         personIdMap.set(p.id, personDbId);
         linkSessionPerson.run(sessionId, personDbId);
+      }
+    }
+
+    // If no proband flag was detected, set the first named person as proband
+    if (probandExternalId === null && decodedPersons.length > 0) {
+      const named = decodedPersons.find(p =>
+        ((p.fName || p.firstName || '').trim() || (p.lName || p.lastName || '').trim())
+      );
+      const fallback = named || decodedPersons[0];
+      if (fallback) {
+        probandExternalId = fallback.id;
+        db.prepare(`
+          UPDATE pedigree_import_person
+          SET is_proband = 1
+          WHERE pedigree_id = ? AND external_id = ?
+        `).run(pedigreeId, probandExternalId);
       }
     }
 
