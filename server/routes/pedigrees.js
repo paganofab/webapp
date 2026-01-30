@@ -540,6 +540,7 @@ router.get("/:id/people", (req, res) => {
       SELECT
         ip.id,
         ip.external_id,
+        ip.is_proband,
         ip.f_name,
         ip.l_name,
         ip.gender,
