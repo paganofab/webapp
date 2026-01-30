@@ -142,6 +142,21 @@ router.post("/webform/import", (req, res) => {
       performBackgroundPedigreeProcessing(db, pedigreeName, importResult.pedigreeData, pedigreeId);
     });
 
+    // Best-effort proband flag using family proband name
+    try {
+      const probandName = baseName;
+      if (probandName) {
+        db.prepare(`
+          UPDATE pedigree_import_person
+          SET is_proband = 1
+          WHERE pedigree_id = ?
+            AND lower(trim(COALESCE(f_name,'') || ' ' || COALESCE(l_name,''))) = lower(?)
+        `).run(pedigreeId, probandName);
+      }
+    } catch (err) {
+      // ignore proband flag errors
+    }
+
     return res.json({
       success: true,
       pedigreeId,
