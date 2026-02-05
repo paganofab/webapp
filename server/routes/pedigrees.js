@@ -273,6 +273,58 @@ router.post("/", async (req, res) => {
   }
 });
 
+router.post("/autosave", async (req, res) => {
+  try {
+    const { name, data, pedigreeId = null } = req.body || {};
+
+    if (!name || !data) {
+      return res.status(400).json({ success: false, error: "name and data required" });
+    }
+
+    const dataString = typeof data === "string" ? data : JSON.stringify(data);
+
+    let targetId = null;
+
+    if (pedigreeId) {
+      const updateById = db.prepare(`
+        UPDATE pedigrees
+        SET data = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ? AND user_id = ?
+      `);
+      const result = updateById.run(dataString, pedigreeId, req.user.id);
+      if (result.changes > 0) {
+        targetId = pedigreeId;
+      }
+    }
+
+    if (!targetId) {
+      const existing = db
+        .prepare("SELECT id FROM pedigrees WHERE name = ? AND user_id = ?")
+        .get(name, req.user.id);
+
+      if (existing) {
+        db.prepare(`
+          UPDATE pedigrees
+          SET data = ?, updated_at = CURRENT_TIMESTAMP
+          WHERE id = ? AND user_id = ?
+        `).run(dataString, existing.id, req.user.id);
+        targetId = existing.id;
+      } else {
+        const insertStmt = db.prepare(`
+          INSERT INTO pedigrees (name, data, user_id, created_at, updated_at)
+          VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        `);
+        const result = insertStmt.run(name, dataString, req.user.id);
+        targetId = result.lastInsertRowid;
+      }
+    }
+
+    return res.json({ success: true, id: targetId });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 router.delete("/by-name/:name", (req, res) => {
   try {
     const transaction = db.transaction(() => {
