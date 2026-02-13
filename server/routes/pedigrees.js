@@ -655,9 +655,13 @@ router.get("/:id/variations", (req, res) => {
     const rows = db.prepare(`
       SELECT *, external_person_id AS person_id
       FROM pedigree_import_person_molecular_variation
-      WHERE pedigree_id = ? AND import_person_id = ?
+      WHERE pedigree_id = ?
+        AND (
+          import_person_id = ?
+          OR external_person_id IN (${candidateList.map(() => "?").join(",")})
+        )
       ORDER BY id DESC
-    `).all(pedigreeId, importPerson.id);
+    `).all(pedigreeId, importPerson.id, ...candidateList);
 
     return res.json({ success: true, variations: rows });
   } catch (error) {
@@ -734,7 +738,22 @@ router.get("/:id/people", (req, res) => {
       LEFT JOIN pedigree_import_person_gene ipg ON ipg.person_id = ip.id
       LEFT JOIN pedigree_import_gene g ON g.id = ipg.gene_id
       LEFT JOIN pedigree_import_person_molecular_variation mv
-        ON mv.import_person_id = ip.id AND mv.pedigree_id = ip.pedigree_id
+        ON mv.pedigree_id = ip.pedigree_id
+       AND (
+         mv.import_person_id = ip.id
+         OR mv.external_person_id = ip.external_id
+         OR (
+           CASE
+             WHEN ip.external_id LIKE '%.0' THEN substr(ip.external_id, 1, length(ip.external_id) - 2)
+             ELSE ip.external_id
+           END
+         ) = (
+           CASE
+             WHEN mv.external_person_id LIKE '%.0' THEN substr(mv.external_person_id, 1, length(mv.external_person_id) - 2)
+             ELSE mv.external_person_id
+           END
+         )
+       )
       WHERE ip.pedigree_id = ?
       GROUP BY ip.id
       ORDER BY ip.generation, ip.external_id
