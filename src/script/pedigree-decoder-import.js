@@ -182,13 +182,26 @@ function importPedigreeData(db, graph, decodedPersons, sessionName, sourceInfo, 
     const partnerships = nodes.filter(n => !!n.hub && !!n.rel).length;
 
     // Keep import rows in sync with the current graph to avoid stale/duplicate people.
-    const decodedExternalIds = decodedPersons.map((p) => String(p.id));
-    if (decodedExternalIds.length > 0) {
+    const normalizeExternalId = (value) => {
+      const s = String(value);
+      return s.endsWith(".0") ? s.slice(0, -2) : s;
+    };
+
+    const decodedNormalizedExternalIds = Array.from(
+      new Set(decodedPersons.map((p) => normalizeExternalId(p.id)))
+    );
+
+    if (decodedNormalizedExternalIds.length > 0) {
       db.prepare(`
         DELETE FROM pedigree_import_person
         WHERE pedigree_id = ?
-          AND external_id NOT IN (${decodedExternalIds.map(() => "?").join(",")})
-      `).run(pedigreeId, ...decodedExternalIds);
+          AND (
+            CASE
+              WHEN external_id LIKE '%.0' THEN substr(external_id, 1, length(external_id) - 2)
+              ELSE external_id
+            END
+          ) NOT IN (${decodedNormalizedExternalIds.map(() => "?").join(",")})
+      `).run(pedigreeId, ...decodedNormalizedExternalIds);
     } else {
       db.prepare("DELETE FROM pedigree_import_person WHERE pedigree_id = ?").run(pedigreeId);
     }
