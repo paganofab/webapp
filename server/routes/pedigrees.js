@@ -17,6 +17,96 @@ function ensurePdfsDir() {
   return pdfDir;
 }
 
+function mapImportGender(gender) {
+  if (!gender) return "O";
+  const normalized = String(gender).toLowerCase();
+  if (normalized === "m" || normalized === "male" || normalized === "1") return "M";
+  if (normalized === "f" || normalized === "female" || normalized === "2") return "F";
+  return "O";
+}
+
+function mapImportLifeStatus(personProp = {}) {
+  if (personProp.lifeStatus) return String(personProp.lifeStatus).toLowerCase();
+  if (personProp.isAlive === false) return "deceased";
+  if (personProp.status) {
+    const normalized = String(personProp.status).toLowerCase();
+    if (normalized === "deceased" || normalized === "stillborn") return normalized;
+  }
+  return "alive";
+}
+
+function upsertImportPersonFromPedigreeData(dbInstance, pedigreeId, candidateList) {
+  const pedigreeRow = dbInstance
+    .prepare("SELECT data FROM pedigrees WHERE id = ?")
+    .get(pedigreeId);
+
+  if (!pedigreeRow || !pedigreeRow.data) {
+    return false;
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(pedigreeRow.data);
+  } catch (error) {
+    return false;
+  }
+
+  const nodes = Array.isArray(parsed?.GG) ? parsed.GG : [];
+  const node = nodes.find((entry) => {
+    if (!entry || entry.hub || entry.chhub || entry.rel) return false;
+    return candidateList.includes(String(entry.id));
+  });
+
+  if (!node) {
+    return false;
+  }
+
+  const prop = node.prop || {};
+  const upsertImportPerson = dbInstance.prepare(`
+    INSERT INTO pedigree_import_person
+    (pedigree_id, external_id, f_name, l_name, gender, dob, dod, life_status, evaluated, childless_status, carrier_status, comments, is_proband, generation, position_x)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(pedigree_id, external_id) DO UPDATE SET
+      f_name = excluded.f_name,
+      l_name = excluded.l_name,
+      gender = excluded.gender,
+      dob = excluded.dob,
+      dod = excluded.dod,
+      life_status = excluded.life_status,
+      evaluated = excluded.evaluated,
+      childless_status = excluded.childless_status,
+      carrier_status = excluded.carrier_status,
+      comments = excluded.comments,
+      is_proband = excluded.is_proband,
+      generation = excluded.generation,
+      position_x = excluded.position_x
+  `);
+
+  const externalId = String(node.id);
+  const ranks = Array.isArray(parsed?.ranks) ? parsed.ranks : [];
+  const positions = Array.isArray(parsed?.positions) ? parsed.positions : [];
+
+  upsertImportPerson.run(
+    pedigreeId,
+    externalId,
+    prop.fName || prop.firstName || null,
+    prop.lName || prop.lastName || null,
+    mapImportGender(prop.gender),
+    prop.dob || prop.birthDate || null,
+    prop.dod || prop.deathDate || null,
+    mapImportLifeStatus(prop),
+    prop.evaluated ? 1 : 0,
+    prop.childlessStatus || null,
+    prop.carrierStatus || null,
+    prop.comments || prop.notes || null,
+    prop.proband || prop.isProband || prop.probandArrow || externalId === "0" || externalId === "0.0" ? 1 : 0,
+    Number.isFinite(ranks[node.id]) ? ranks[node.id] : null,
+    Number.isFinite(positions[node.id]) ? positions[node.id] : null
+  );
+
+  return true;
+}
+
 router.get("/", (req, res) => {
   try {
     const rows = db
@@ -480,6 +570,13 @@ router.post("/:id/variations", (req, res) => {
       // Attempt on-demand import if background processing hasn't created import persons yet
       processPedigreeFromDatabaseById(db, pedigreeId);
       importPerson = importPersonLookup.get(pedigreeId, ...candidateList);
+    }
+
+    if (!importPerson) {
+      const createdFromGraph = upsertImportPersonFromPedigreeData(db, pedigreeId, candidateList);
+      if (createdFromGraph) {
+        importPerson = importPersonLookup.get(pedigreeId, ...candidateList);
+      }
     }
 
     if (!importPerson) {

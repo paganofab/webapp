@@ -180,6 +180,18 @@ function importPedigreeData(db, graph, decodedPersons, sessionName, sourceInfo, 
     
     const nodes = graph.GG || [];
     const partnerships = nodes.filter(n => !!n.hub && !!n.rel).length;
+
+    // Keep import rows in sync with the current graph to avoid stale/duplicate people.
+    const decodedExternalIds = decodedPersons.map((p) => String(p.id));
+    if (decodedExternalIds.length > 0) {
+      db.prepare(`
+        DELETE FROM pedigree_import_person
+        WHERE pedigree_id = ?
+          AND external_id NOT IN (${decodedExternalIds.map(() => "?").join(",")})
+      `).run(pedigreeId, ...decodedExternalIds);
+    } else {
+      db.prepare("DELETE FROM pedigree_import_person WHERE pedigree_id = ?").run(pedigreeId);
+    }
     
     insertSession.run(
       sessionId,
